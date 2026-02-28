@@ -165,7 +165,9 @@ if (Test-Path $VenvDir) {
     Remove-Item -Recurse -Force $VenvDir
 }
 
-& $UEPython -m venv $VenvDir
+$prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+& $UEPython -m venv $VenvDir 2>&1 | Out-Null
+$ErrorActionPreference = $prevEAP
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  ERROR: Failed to create virtual environment." -ForegroundColor Red
     exit 1
@@ -181,20 +183,56 @@ $reqFile = Join-Path $PythonDir "requirements.txt"
 $vendorDir = Join-Path $PythonDir "vendor"
 $installed = $false
 
-# 优先在线安装（带重试）
-& $pipExe install -r $reqFile --quiet --retries 3 --timeout 30 2>$null
-if ($LASTEXITCODE -eq 0) {
-    $installed = $true
-    Write-Host "  Dependencies installed (online)." -ForegroundColor Green
+# 辅助函数：运行 pip 并实时显示输出，带总超时保护
+function Invoke-PipInstall {
+    param(
+        [string]$PipExePath,
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds = 600   # 整体进程超时（默认 10 分钟）
+    )
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName  = $PipExePath
+    $psi.Arguments = $Arguments -join ' '
+    $psi.UseShellExecute = $false
+    # 不重定向输出，让 pip 直接打印到控制台（进度条 + 日志实时可见）
+    $psi.RedirectStandardOutput = $false
+    $psi.RedirectStandardError  = $false
+
+    $proc = [System.Diagnostics.Process]::Start($psi)
+
+    $exited = $proc.WaitForExit($TimeoutSeconds * 1000)
+    if (-not $exited) {
+        try { $proc.Kill() } catch {}
+        Write-Host "  ERROR: pip process timed out after $TimeoutSeconds seconds." -ForegroundColor Red
+        return 124   # 仿 Linux timeout 退出码
+    }
+
+    return $proc.ExitCode
 }
 
-# 在线失败 → 离线回退
-if (-not $installed -and (Test-Path $vendorDir)) {
-    Write-Host "  Online install failed, trying offline vendor wheels..." -ForegroundColor Yellow
-    & $pipExe install -r $reqFile --no-index --find-links $vendorDir --quiet
-    if ($LASTEXITCODE -eq 0) {
+# 优先离线 vendor 安装（稳定、快速、无网络依赖）
+if (Test-Path $vendorDir) {
+    Write-Host "  Trying offline vendor wheels first..." -ForegroundColor DarkGray
+    $offlineArgs = @('install', '-r', "`"$reqFile`"", '--no-index', '--find-links', "`"$vendorDir`"")
+    $exitCode = Invoke-PipInstall -PipExePath $pipExe -Arguments $offlineArgs -TimeoutSeconds 300
+    if ($exitCode -eq 0) {
         $installed = $true
         Write-Host "  Dependencies installed (offline vendor)." -ForegroundColor Green
+    } else {
+        Write-Host "  Offline vendor install failed (exit=$exitCode), will try online..." -ForegroundColor Yellow
+    }
+}
+
+# 离线失败或无 vendor 目录 → 在线回退
+if (-not $installed) {
+    Write-Host "  Trying online install (timeout per-socket=120s, process=600s)..." -ForegroundColor DarkGray
+    $onlineArgs = @('install', '-r', "`"$reqFile`"", '--retries', '3', '--timeout', '120', '--progress-bar', 'on')
+    $exitCode2 = Invoke-PipInstall -PipExePath $pipExe -Arguments $onlineArgs -TimeoutSeconds 600
+    if ($exitCode2 -eq 0) {
+        $installed = $true
+        Write-Host "  Dependencies installed (online)." -ForegroundColor Green
+    } else {
+        Write-Host "  Online install also failed (exit=$exitCode2)." -ForegroundColor Yellow
     }
 }
 
