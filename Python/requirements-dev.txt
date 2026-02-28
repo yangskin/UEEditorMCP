@@ -1,0 +1,5 @@
+# Development / testing dependencies (not needed for deployment)
+-r requirements.txt
+pytest>=7.0
+black>=23.0
+mypy>=1.0

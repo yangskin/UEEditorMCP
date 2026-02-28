@@ -1,0 +1,43 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "UEEditorMCP",
+	"Description": "基于 lilklon/UEBlueprintMCP（MIT）二次开发的 Unreal Editor MCP 插件，提供统一 7-tool 接口、持久连接与崩溃保护。",
+	"Category": "Editor",
+	"CreatedBy": "yangskin（基于 lilklon/UEBlueprintMCP）",
+	"CreatedByURL": "https://github.com/lilklon/UEBlueprintMCP",
+	"DocsURL": "https://github.com/lilklon/UEBlueprintMCP",
+	"MarketplaceURL": "",
+	"SupportURL": "https://github.com/lilklon/UEBlueprintMCP/issues",
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "UEEditorMCP",
+			"Type": "Editor",
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64",
+				"Mac",
+				"Linux"
+			]
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "EnhancedInput",
+			"Enabled": true
+		},
+		{
+			"Name": "EditorScriptingUtilities",
+			"Enabled": true
+		},
+		{
+			"Name": "ModelViewViewModel",
+			"Enabled": true
+		}
+	]
+}
